@@ -3,6 +3,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 // CORS headers
+header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
@@ -25,24 +26,39 @@ try {
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (\PDOException $e) {
     handleError($e);
+    exit;
 }
 
+// Get the action from the request
 $action = $_GET['action'] ?? '';
 
-if ($action === 'register') {
-    handleRegister($pdo);
-} elseif ($action === 'login') {
-    handleLogin($pdo);
-} elseif ($action === 'products') {
-    handleProducts($pdo);
-} else {
-    echo json_encode(['message' => 'Invalid action']);
+$success = false;
+
+switch ($action) {
+    case 'register':
+        $success = handleRegister($pdo);
+        break;
+    case 'login':
+        $success = handleLogin($pdo);
+        break;
+    case 'products':
+        $success = handleProducts($pdo);
+        break;
+    default:
+        echo json_encode(['message' => 'Invalid action']);
+        exit;
+}
+
+if ($success) {
+    // Successful operations will be handled here
+    echo json_encode(['message' => 'Operation successful']);
 }
 
 function handleRegister($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
+
     if (!validateRegisterData($data)) {
-        return;
+        return false;
     }
 
     $username = trim($data['username']);
@@ -51,13 +67,12 @@ function handleRegister($pdo) {
 
     if (checkEmailExists($pdo, $email)) {
         echo json_encode(['message' => 'Email already registered']);
-        return;
+        return false;
     }
 
     $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
     $stmt = $pdo->prepare("INSERT INTO customers (username, email, password) VALUES (?, ?, ?)");
-    $success = $stmt->execute([$username, $email, $hashedPassword]);
-    echo json_encode(['message' => $success ? 'User registered successfully' : 'Registration failed']);
+    return $stmt->execute([$username, $email, $hashedPassword]);
 }
 
 function validateRegisterData($data) {
@@ -87,9 +102,10 @@ function checkEmailExists($pdo, $email) {
 
 function handleLogin($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
+
     if (empty($data['username']) || empty($data['password'])) {
         echo json_encode(['message' => 'Missing required fields']);
-        return;
+        return false;
     }
 
     $email = trim($data['username']);
@@ -101,8 +117,10 @@ function handleLogin($pdo) {
 
     if ($user && password_verify($password, $user['password'])) {
         echo json_encode(['message' => 'Login successful']);
+        return true;
     } else {
         echo json_encode(['message' => 'Invalid email or password']);
+        return false;
     }
 }
 
@@ -110,6 +128,7 @@ function handleProducts($pdo) {
     $stmt = $pdo->query("SELECT * FROM products");
     $products = $stmt->fetchAll();
     echo json_encode($products);
+    return true;
 }
 
 function handleError($exception) {
