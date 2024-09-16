@@ -3,6 +3,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 // CORS headers
+header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
@@ -10,7 +11,7 @@ header("Access-Control-Allow-Headers: Content-Type");
 $host = 'cloudcrew-rds-database.cluster-ctwcqkmykzvj.ap-south-1.rds.amazonaws.com';
 $db = 'cloudcrewdatabase';
 $user = 'admin';
-$pass = 'Cloudcrew123';
+$pass = 'Cloudcrew123'; // Store this securely in environment variables
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
@@ -23,7 +24,7 @@ $options = [
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (\PDOException $e) {
-    throw new \PDOException($e->getMessage(), (int)$e->getCode());
+    handleError($e);
 }
 
 // Get the action from the request
@@ -31,39 +32,50 @@ $action = $_GET['action'] ?? '';
 
 switch ($action) {
     case 'register':
-        registerUser($pdo);
+        handleRegister($pdo);
         break;
     case 'login':
-        loginUser($pdo);
+        handleLogin($pdo);
         break;
     case 'products':
-        fetchProducts($pdo);
+        handleProducts($pdo);
         break;
     default:
         echo json_encode(['message' => 'Invalid action']);
         break;
 }
 
-function registerUser($pdo) {
+function handleRegister($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
-    $username = $data['username'];
-    $email = $data['email'];
-    $password = $data['password'];
+    if (!isset($data['username'], $data['email'], $data['password'], $data['confirmPassword'])) {
+        echo json_encode(['message' => 'Missing required fields']);
+        return;
+    }
 
-    // Check if email already exists
+    $username = trim($data['username']);
+    $email = filter_var(trim($data['email']), FILTER_VALIDATE_EMAIL);
+    $password = trim($data['password']);
+    $confirmPassword = trim($data['confirmPassword']);
+
+    if (!$email) {
+        echo json_encode(['message' => 'Invalid email format']);
+        return;
+    }
+
+    if ($password !== $confirmPassword) {
+        echo json_encode(['message' => 'Passwords do not match']);
+        return;
+    }
+
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM customers WHERE email = ?");
     $stmt->execute([$email]);
-    $count = $stmt->fetchColumn();
-
-    if ($count > 0) {
+    if ($stmt->fetchColumn() > 0) {
         echo json_encode(['message' => 'Email already registered']);
         return;
     }
 
-    // Hash password before storing it
     $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
 
-    // Insert new user with hashed password
     $stmt = $pdo->prepare("INSERT INTO customers (username, email, password) VALUES (?, ?, ?)");
     if ($stmt->execute([$username, $email, $hashedPassword])) {
         echo json_encode(['message' => 'User registered successfully']);
@@ -72,16 +84,20 @@ function registerUser($pdo) {
     }
 }
 
-function loginUser($pdo) {
+function handleLogin($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
-    $email = $data['username'];
-    $password = $data['password'];
+    if (!isset($data['username'], $data['password'])) {
+        echo json_encode(['message' => 'Missing required fields']);
+        return;
+    }
+
+    $email = trim($data['username']);
+    $password = trim($data['password']);
 
     $stmt = $pdo->prepare("SELECT * FROM customers WHERE email = ?");
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
-    // Verify hashed password
     if ($user && password_verify($password, $user['password'])) {
         echo json_encode(['message' => 'Login successful']);
     } else {
@@ -89,8 +105,23 @@ function loginUser($pdo) {
     }
 }
 
-function fetchProducts($pdo) {
+function handleProducts($pdo) {
     $stmt = $pdo->query("SELECT * FROM products");
     $products = $stmt->fetchAll();
     echo json_encode($products);
+}
+
+function handleError($exception) {
+    // Log error details to a file (adjust path and method as needed)
+    $logFile = __DIR__ . '/error.log';
+    $errorMessage = sprintf(
+        "[%s] %s: %s\n",
+        date('Y-m-d H:i:s'),
+        $exception->getFile() . ':' . $exception->getLine(),
+        $exception->getMessage()
+    );
+    file_put_contents($logFile, $errorMessage, FILE_APPEND);
+
+    // Respond with a generic error message
+    echo json_encode(['message' => 'Internal server error']);
 }
