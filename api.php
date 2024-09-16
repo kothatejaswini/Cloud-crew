@@ -7,7 +7,6 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
-
 // Database configuration
 $host = 'cloudcrew-rds-database.cluster-ctwcqkmykzvj.ap-south-1.rds.amazonaws.com';
 $db = 'cloudcrewdatabase';
@@ -25,10 +24,13 @@ $options = [
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (\PDOException $e) {
-    throw new \PDOException($e->getMessage(), (int)$e->getCode());
+    // Log error and provide a generic message
+    error_log($e->getMessage());
+    echo json_encode(['message' => 'Database connection error']);
+    exit;
 }
 
-// Get the action from the request.
+// Get the action from the request
 $action = $_GET['action'] ?? '';
 
 switch ($action) {
@@ -48,9 +50,14 @@ switch ($action) {
 
 function registerUser($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
-    $username = $data['username'];
-    $email = $data['email'];
-    $password = $data['password'];
+    $username = filter_var($data['username'] ?? '', FILTER_SANITIZE_STRING);
+    $email = filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL);
+    $password = $data['password'] ?? '';
+
+    if (!$username || !$email || !$password) {
+        echo json_encode(['message' => 'Invalid input']);
+        return;
+    }
 
     // Check if email already exists
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM customers WHERE email = ?");
@@ -62,9 +69,12 @@ function registerUser($pdo) {
         return;
     }
 
+    // Hash the password before storing
+    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+
     // Insert new user
     $stmt = $pdo->prepare("INSERT INTO customers (username, email, password) VALUES (?, ?, ?)");
-    if ($stmt->execute([$username, $email, $password])) {
+    if ($stmt->execute([$username, $email, $hashedPassword])) {
         echo json_encode(['message' => 'User registered successfully']);
     } else {
         echo json_encode(['message' => 'Registration failed']);
@@ -73,14 +83,19 @@ function registerUser($pdo) {
 
 function loginUser($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
-    $email = $data['username'];
-    $password = $data['password'];
+    $email = filter_var($data['username'] ?? '', FILTER_VALIDATE_EMAIL);
+    $password = $data['password'] ?? '';
+
+    if (!$email || !$password) {
+        echo json_encode(['message' => 'Invalid input']);
+        return;
+    }
 
     $stmt = $pdo->prepare("SELECT * FROM customers WHERE email = ?");
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
-    if ($user && $user['password'] === $password) {
+    if ($user && password_verify($password, $user['password'])) {
         echo json_encode(['message' => 'Login successful']);
     } else {
         echo json_encode(['message' => 'Invalid email or password']);
@@ -92,4 +107,3 @@ function fetchProducts($pdo) {
     $products = $stmt->fetchAll();
     echo json_encode($products);
 }
-
