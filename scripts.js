@@ -1,10 +1,16 @@
 // Utility function to handle form submissions
 function handleFormSubmission(formId, apiUrl, successRedirectUrl, successMessage) {
-    document.getElementById(formId)?.addEventListener('submit', function(event) {
+    const form = document.getElementById(formId);
+    if (!form) {
+        console.error(`Form with ID ${formId} not found.`);
+        return;
+    }
+
+    form.addEventListener('submit', function(event) {
         event.preventDefault(); // Prevent the default form submission
 
         // Retrieve and trim input values
-        const formData = new FormData(this);
+        const formData = new FormData(form);
         const data = {};
         formData.forEach((value, key) => {
             data[key] = value.trim();
@@ -29,19 +35,24 @@ function handleFormSubmission(formId, apiUrl, successRedirectUrl, successMessage
         })
         .then(response => response.json())
         .then(responseData => {
-            alert(responseData.message);
-            if (responseData.message === successMessage) {
-                // Redirect upon successful registration or login
-                if (successRedirectUrl) {
-                    window.location.href = successRedirectUrl;
-                }
-            }
+            handleResponse(responseData, successMessage, successRedirectUrl);
         })
         .catch(error => {
             console.error('Error:', error);
             alert("An error occurred.");
         });
     });
+}
+
+// Utility function to handle response
+function handleResponse(responseData, successMessage, successRedirectUrl) {
+    alert(responseData.message);
+    if (responseData.message === successMessage) {
+        // Redirect upon successful registration or login
+        if (successRedirectUrl) {
+            window.location.href = successRedirectUrl;
+        }
+    }
 }
 
 // Handle registration form submission
