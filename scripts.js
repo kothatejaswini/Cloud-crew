@@ -68,7 +68,7 @@ document.getElementById('loginForm')?.addEventListener('submit', function(event)
     };
 
     // Send data to the backend API
-    fetch('http://cloudcrew-1275067821.ap-south-1.elb.amazonaws.com/api.php?action=login', {
+    fetch('https://cloudcrew-1275067821.ap-south-1.elb.amazonaws.com/api.php?action=login', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
