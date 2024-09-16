@@ -49,7 +49,7 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        fetch('http://cloudcrew-1275067821.ap-south-1.elb.amazonaws.com/api.php?action=products')
+        fetch('https://cloudcrew-1275067821.ap-south-1.elb.amazonaws.com/api.php?action=products')
             .then(response => response.json())
             .then(products => {
                 const productList = document.getElementById('productList');
