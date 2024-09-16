@@ -27,7 +27,7 @@ document.getElementById('registrationForm')?.addEventListener('submit', function
     };
 
     // Send data to the backend API
-    fetch('http://cloudcrew-1275067821.ap-south-1.elb.amazonaws.com/api.php?action=register', {
+    fetch('https://cloudcrew-1275067821.ap-south-1.elb.amazonaws.com/api.php?action=register', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
