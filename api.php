@@ -3,7 +3,6 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 // CORS headers
-header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
@@ -24,10 +23,7 @@ $options = [
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (\PDOException $e) {
-    // Log error and provide a generic message
-    error_log($e->getMessage());
-    echo json_encode(['message' => 'Database connection error']);
-    exit;
+    throw new \PDOException($e->getMessage(), (int)$e->getCode());
 }
 
 // Get the action from the request
@@ -50,14 +46,9 @@ switch ($action) {
 
 function registerUser($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
-    $username = filter_var($data['username'] ?? '', FILTER_SANITIZE_STRING);
-    $email = filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL);
-    $password = $data['password'] ?? '';
-
-    if (!$username || !$email || !$password) {
-        echo json_encode(['message' => 'Invalid input']);
-        return;
-    }
+    $username = $data['username'];
+    $email = $data['email'];
+    $password = $data['password'];
 
     // Check if email already exists
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM customers WHERE email = ?");
@@ -69,10 +60,10 @@ function registerUser($pdo) {
         return;
     }
 
-    // Hash the password before storing
-    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+    // Hash password before storing it
+    $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
 
-    // Insert new user
+    // Insert new user with hashed password
     $stmt = $pdo->prepare("INSERT INTO customers (username, email, password) VALUES (?, ?, ?)");
     if ($stmt->execute([$username, $email, $hashedPassword])) {
         echo json_encode(['message' => 'User registered successfully']);
@@ -83,18 +74,14 @@ function registerUser($pdo) {
 
 function loginUser($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
-    $email = filter_var($data['username'] ?? '', FILTER_VALIDATE_EMAIL);
-    $password = $data['password'] ?? '';
-
-    if (!$email || !$password) {
-        echo json_encode(['message' => 'Invalid input']);
-        return;
-    }
+    $email = $data['username'];
+    $password = $data['password'];
 
     $stmt = $pdo->prepare("SELECT * FROM customers WHERE email = ?");
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
+    // Verify hashed password
     if ($user && password_verify($password, $user['password'])) {
         echo json_encode(['message' => 'Login successful']);
     } else {
