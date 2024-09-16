@@ -10,7 +10,8 @@ header("Access-Control-Allow-Headers: Content-Type");
 $host = 'cloudcrew-rds-database.cluster-ctwcqkmykzvj.ap-south-1.rds.amazonaws.com';
 $db = 'cloudcrewdatabase';
 $user = 'admin';
-$pass = 'Cloudcrew123'; // Store this securely in environment variables
+// Ensure to store sensitive information like passwords in environment variables
+$pass = getenv('DB_PASSWORD');
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
@@ -26,66 +27,67 @@ try {
     handleError($e);
 }
 
-// Get the action from the request
 $action = $_GET['action'] ?? '';
 
-switch ($action) {
-    case 'register':
-        handleRegister($pdo);
-        break;
-    case 'login':
-        handleLogin($pdo);
-        break;
-    case 'products':
-        handleProducts($pdo);
-        break;
-    default:
-        echo json_encode(['message' => 'Invalid action']);
-        break;
+if ($action === 'register') {
+    handleRegister($pdo);
+} elseif ($action === 'login') {
+    handleLogin($pdo);
+} elseif ($action === 'products') {
+    handleProducts($pdo);
+} else {
+    echo json_encode(['message' => 'Invalid action']);
 }
 
 function handleRegister($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
-    if (!isset($data['username'], $data['email'], $data['password'], $data['confirmPassword'])) {
-        echo json_encode(['message' => 'Missing required fields']);
+    if (!validateRegisterData($data)) {
         return;
     }
 
     $username = trim($data['username']);
     $email = filter_var(trim($data['email']), FILTER_VALIDATE_EMAIL);
     $password = trim($data['password']);
-    $confirmPassword = trim($data['confirmPassword']);
 
-    if (!$email) {
-        echo json_encode(['message' => 'Invalid email format']);
-        return;
-    }
-
-    if ($password !== $confirmPassword) {
-        echo json_encode(['message' => 'Passwords do not match']);
-        return;
-    }
-
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM customers WHERE email = ?");
-    $stmt->execute([$email]);
-    if ($stmt->fetchColumn() > 0) {
+    if (checkEmailExists($pdo, $email)) {
         echo json_encode(['message' => 'Email already registered']);
         return;
     }
 
     $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
-
     $stmt = $pdo->prepare("INSERT INTO customers (username, email, password) VALUES (?, ?, ?)");
-    if ($stmt->execute([$username, $email, $hashedPassword])) {
-        echo json_encode(['message' => 'User registered successfully']);
-    } else {
-        echo json_encode(['message' => 'Registration failed']);
+    $success = $stmt->execute([$username, $email, $hashedPassword]);
+    echo json_encode(['message' => $success ? 'User registered successfully' : 'Registration failed']);
+}
+
+function validateRegisterData($data) {
+    if (empty($data['username']) || empty($data['email']) || empty($data['password']) || empty($data['confirmPassword'])) {
+        echo json_encode(['message' => 'Missing required fields']);
+        return false;
     }
+
+    if (trim($data['password']) !== trim($data['confirmPassword'])) {
+        echo json_encode(['message' => 'Passwords do not match']);
+        return false;
+    }
+
+    if (!filter_var(trim($data['email']), FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['message' => 'Invalid email format']);
+        return false;
+    }
+
+    return true;
+}
+
+function checkEmailExists($pdo, $email) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM customers WHERE email = ?");
+    $stmt->execute([$email]);
+    return $stmt->fetchColumn() > 0;
 }
 
 function handleLogin($pdo) {
     $data = json_decode(file_get_contents('php://input'), true);
-    if (!isset($data['username'], $data['password'])) {
+    if (empty($data['username']) || empty($data['password'])) {
         echo json_encode(['message' => 'Missing required fields']);
         return;
     }
